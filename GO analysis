@@ -1,0 +1,220 @@
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("data.table")
+#####################################
+
+setwd("C:/Users/psequ/OneDrive/Desktop/Thesis Systems/Functional enrichment") 
+getwd()
+dir()
+
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(GOplot)
+library(ggplot2)
+library(stringr)
+library(ggplot2)
+library(enrichplot)
+library(DOSE)
+library(ReactomePA)
+library(data.table)
+
+##########
+sig.gene <- read.delim("Cluster.txt",  sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+
+gene<-sig.gene[,1]
+head(gene)
+
+gene.list_I<-bitr(gene, fromType = "SYMBOL", 
+              toType = c("ENSEMBL","ENTREZID"),
+              OrgDb = org.Hs.eg.db,
+              drop = FALSE)
+
+gene.list_II<-bitr(gene, fromType = "SYMBOL", 
+                toType = c("ENSEMBL","ENTREZID"),
+                OrgDb = org.Hs.eg.db,
+                drop = FALSE)
+
+
+gene.list_III<-bitr(gene, fromType = "SYMBOL", 
+                   toType = c("ENSEMBL","ENTREZID"),
+                   OrgDb = org.Hs.eg.db,
+                   drop = FALSE)
+
+gene.list_IV<-bitr(gene, fromType = "SYMBOL", 
+                    toType = c("ENSEMBL","ENTREZID"),
+                    OrgDb = org.Hs.eg.db,
+                    drop = FALSE)
+
+
+ego_bp_I<-enrichGO(gene = gene.list_I$ENSEMBL,
+                 OrgDb = org.Hs.eg.db,
+                 keyType = 'ENSEMBL',
+                 ont  = "BP",
+                 pAdjustMethod = "BH",
+                 pvalueCutoff = 0.01,
+                 qvalueCutoff = 0.05)
+
+ego_bp_II<-enrichGO(gene = gene.list_II$ENSEMBL,
+                 OrgDb = org.Hs.eg.db,
+                 keyType = 'ENSEMBL',
+                 ont  = "BP",
+                 pAdjustMethod = "BH",
+                 pvalueCutoff = 0.01,
+                 qvalueCutoff = 0.05)
+
+ego_bp_III<-enrichGO(gene = gene.list_III$ENSEMBL,
+                 OrgDb = org.Hs.eg.db,
+                 keyType = 'ENSEMBL',
+                 ont  = "BP",
+                 pAdjustMethod = "BH",
+                 pvalueCutoff = 0.01,
+                 qvalueCutoff = 0.05)
+
+ego_bp_IV<-enrichGO(gene = gene.list_IV$ENSEMBL,
+                 OrgDb = org.Hs.eg.db,
+                 keyType = 'ENSEMBL',
+                 ont  = "BP",
+                 pAdjustMethod = "BH",
+                 pvalueCutoff = 0.01,
+                 qvalueCutoff = 0.05)
+
+
+GO <- list(Stage_I=gene.list_I$ENTREZID,Stage_II=gene.list_II$ENTREZID,Stage_III=gene.list_III$ENTREZID,Stage_IV=gene.list_IV$ENTREZID)
+
+ComGO <- compareCluster(geneCluster = GO, fun = "enrichKEGG",organism="hsa") 
+# or
+ComGO <- compareCluster(geneCluster = GO, fun = "enrichGO",ont="BP", OrgDb='org.Hs.eg.db') 
+
+dotplot(ComGO,showCategory = 30)
+
+dotplot(ComGO,showCategory = 10, x = "GeneRatio",by = "geneRatio",split = "ONTOLOGY", 
+        font.size = 10) + facet_grid(~Cluster)
+
+com<-as.data.frame(ComGO)
+
+write.csv(com, file = "comGO.csv", row.names=F, quote=F)
+
+############  Go plot   ###########
+
+GOgene <- read.delim("GOplot_yellow.txt",  sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+
+GOgene<-GOgene[,1]
+head(gene)
+
+GO.list<-bitr(GOgene, fromType = "SYMBOL", 
+                  toType = c("ENSEMBL","ENTREZID"),
+                  OrgDb = org.Hs.eg.db,
+                  drop = FALSE)
+
+ego<-enrichGO(gene = GO.list$SYMBOL,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = 'SYMBOL',
+                   ont  = "ALL",
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = 0.01,
+                   qvalueCutoff = 0.05,
+                   maxGSSize= 5000)
+
+Functional<-as.data.frame(ego)
+
+write.csv(Functional, file = "Functional.csv", row.names=F, quote=F)
+
+dotplot(ego,showCategory = 30)
+
+barplot(ego,showCategory = 10,x = "Count", split = "ONTOLOGY", 
+        font.size = 10) + facet_grid(ONTOLOGY~., scale="free")
+
+heatplot(ego)
+
+kk <- enrichKEGG(GO.list$ENTREZID, organism="hsa",keyType = "kegg",
+                 pvalueCutoff=0.05,pAdjustMethod="BH",qvalueCutoff=0.05)
+
+KEGG<- as.data.frame(kk)
+dim(kk)
+
+barplot(kk, showCategory=20,title="Enrichment KEGG")
+
+### Select the top 10 enrichment results, and extract GO id, description, adj.p and gene ID columns
+
+GO_BP <- ego[1:10,c(1,2,3,7,9)] 
+GO_CC <- ego[27:36,c(1,2,3,7,9)] 
+GO_MF <- ego[37:46,c(1,2,3,7,9)] 
+KEGG <- KEGG[1:6,c(1,2,6,8)] 
+
+### Modify the separator in the column of geneID
+GO_BP$geneID <- str_replace_all(GO_BP$geneID,"/",",") 
+GO_CC$geneID <- str_replace_all(GO_CC$geneID,"/",",") 
+GO_MF$geneID <- str_replace_all(GO_MF$geneID,"/",",") 
+KEGG$geneID <- str_replace_all(KEGG$geneID,"/",",") 
+
+GO_MF<-GO_MF[,-1]
+  
+names(KEGG)=c("ID","Term","adj_pval", "Genes")
+
+GO_BP$Category = "BP"
+GO_CC$Category = "CC"
+GO_MF$Category = "MF"
+KEGG$Category = "KEGG"
+###Build a gene matrix with logFC values
+genedata<- read.csv( "gene LogFC.csv")
+KEGGdata<- read.csv( "KEGG LogFC.csv")
+
+circ_BP <- circle_dat(GO_BP,genedata)
+circ_CC <- circle_dat(GO_CC,genedata) 
+circ_MF <- circle_dat(GO_MF,genedata) 
+circ_KEGG <- circle_dat(KEGG,KEGGdata) 
+
+#### Chord Diagram
+
+chord <- chord_dat(data=circ_KEGG, genes = KEGGdata) # Generate a matrix with a list of selected genes
+chord <- chord_dat(data=circ_KEGG, process = KEGG$Term) #Generate a list matrix with selected GO terms 
+
+
+chord <- chord_dat(data=circ_KEGG, genes=KEGGdata,process = KEGG$Term) # Build data
+
+pdf("chord_KEGG.pdf",
+     width = 10, height = 10)
+GOChord (data=chord,
+         space = 0.02,  #interval size at go term
+         limit = c(0,2),  #The first value is the number of go terms assigned to at least one gene, and the second value is the number of genes assigned to at least one go term
+         gene.order='logFC',gene.space=0.25,gene.size=5,
+         lfc.col = c('indianred2','white','steelblue2'), #Up and down adjust gene color
+         ribbon.col=brewer.pal(length(KEGG$Term), "Set3"), #GO term color
+         process.label = 10 # Go terms font size
+)
+dev.off()
+
+
+########## GSEA ########
+
+GSEA = read.csv( "Expression_hub.csv" )
+
+GSEA <- read.table(file="GSEA.txt", header = T, sep='\t')
+
+input=KEGGdata$logFC
+
+names(input)=KEGGdata$ID
+
+input = sort(input, decreasing = TRUE)
+
+KEGG_gseresult <- gseKEGG(input,organism = "hsa" 
+                          , pvalueCutoff=0.05)
+
+GSEAresult <- gsePathway(input, nPerm = 1000, minGSSize = 1, maxGSSize = 1000, pvalueCutoff=0.05)
+
+
+edo <- enrichDGN(input)
+
+edo2 <- gseDO(input)
+
+GSEAres<-as.data.frame(edo2)
+
+write.table(GSEAres, file = "GSEAres.txt", row.names=F, sep="\t", quote=F)
+
+gseaplot2(edo2, geneSetID = 1, title = edo2$Description[1],pvalue_table = TRUE)
+
+pdf("GSEA.pdf", width=15, height=10)
+gseaplot2(edo2, geneSetID = 1:7, pvalue_table = TRUE)
+dev.off()
