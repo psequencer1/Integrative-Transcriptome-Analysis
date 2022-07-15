@@ -1,0 +1,287 @@
+# **Import packages**
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt    
+from sklearn.metrics import r2_score
+from sklearn import metrics
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.preprocessing import LabelEncoder
+from mlxtend.plotting import plot_confusion_matrix
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+import keras
+import tensorflow
+from keras.models import Model
+import tensorflow as tf
+from keras import Sequential
+from keras.layers import Input, Dense, Embedding, Dropout, Flatten, LSTM, Conv1D, MaxPooling1D
+from tensorflow.keras.optimizers import Adam
+from sklearn import preprocessing
+import itertools
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc
+# **Read Data**
+data = pd.read_csv("data.csv" )
+data.head()
+label_main=np.array(data["Group"])
+data_main=data.drop(["Group"],axis=1)
+print("label shape",label_main.shape)
+print("data shape",data_main.shape)
+from sklearn.preprocessing import LabelEncoder
+le=LabelEncoder()
+lbl_encoded=le.fit_transform(label_main)
+lbl_encoded[0:20]
+# **Normalize Data**
+scaler = MinMaxScaler()
+scaler.fit(data_main)
+data_normalized=scaler.transform(data_main)
+
+# **split data to train and test sets**
+train_data, test_data, train_label, test_label = train_test_split(data_normalized, lbl_encoded, test_size=0.2, random_state=0,shuffle=True)
+# **function to plot results**
+def plot_results(lbl_test,y_pred,clf_name):
+
+  label_names=["CRC","Normal"]
+  Con_matrix=confusion_matrix(lbl_test, y_pred)
+  fig, ax = plot_confusion_matrix(conf_mat=Con_matrix,
+                                  show_absolute=True,
+                                  show_normed=False,
+
+                              )
+  tick_marks = np.arange(len(label_names))
+  plt.xticks(tick_marks, label_names, rotation=90)
+  plt.yticks(tick_marks, label_names)
+  ax.set_title('confusion_matrix of '+clf_name)
+  plt.show()
+
+
+  # all mertic
+  res=np.zeros(4)
+  classfi_report=classification_report(lbl_test, y_pred,output_dict=True)
+  res[0]=accuracy_score(lbl_test, y_pred)
+  res[1]= classfi_report['macro avg']['precision'] 
+  res[2]= classfi_report['macro avg']['recall']    
+  res[3]= classfi_report['macro avg']['f1-score']
+  
+  #plot
+  metric_names=["accuracy","precision","recall","f1-score"]
+  fig2=plt.figure(2,figsize=(8,10)) #  
+  plt.bar(metric_names, res,color = ['blue','red', 'green','black'])
+  plt.xticks(metric_names, rotation=90)
+  plt.ylabel('percent%' , fontweight='bold')
+  plt.title('results of '+clf_name, fontweight='bold')
+  plt.xlabel("metrics name", fontweight='bold')
+  for i, v in enumerate(res):
+      v=round(v,3)
+      plt.text(i-0.2 , v+0.01 , str(v), color='blue', fontweight='bold')
+  plt.show()
+  
+
+
+
+f plot_results(lbl_test,y_pred,clf_name):
+
+  label_names=["CRC","Normal"]
+  Con_matrix=confusion_matrix(lbl_test, y_pred)
+  fig, ax = plot_confusion_matrix(conf_mat=Con_matrix,
+                                  show_absolute=True,
+                                  show_normed=False,
+
+                              )
+  tick_marks = np.arange(len(label_names))
+  plt.xticks(tick_marks, label_names, rotation=90)
+  plt.yticks(tick_marks, label_names)
+  ax.set_title('confusion_matrix of '+clf_name)
+  plt.show()
+
+
+  # all mertic
+  res=np.zeros(4)
+  classfi_report=classification_report(lbl_test, y_pred,output_dict=True)
+  res[0]=accuracy_score(lbl_test, y_pred)
+  res[1]= classfi_report['macro avg']['precision'] 
+  res[2]= classfi_report['macro avg']['recall']    
+  res[3]= classfi_report['macro avg']['f1-score']
+  
+  #plot
+  metric_names=["accuracy","precision","recall","f1-score"]
+  fig2=plt.figure(2,figsize=(8,10)) #  
+  plt.bar(metric_names, res,color = ['blue','red', 'green','black'])
+  plt.xticks(metric_names, rotation=90)
+  plt.ylabel('percent%' , fontweight='bold')
+  plt.title('results of '+clf_name, fontweight='bold')
+  plt.xlabel("metrics name", fontweight='bold')
+  for i, v in enumerate(res):
+      v=round(v,3)
+      plt.text(i-0.2 , v+0.01 , str(v), color='blue', fontweight='bold')
+  plt.show()
+  
+# **SVM**
+svm_clf = SVC(kernel="rbf",C=0.1)
+svm_clf.fit(train_data, train_label)
+y_pred_svm = svm_clf.predict(test_data)
+plot_results(test_label,y_pred_svm,"SVM")
+
+# **Random Forest**
+rf_clf = RandomForestClassifier(n_estimators=200,max_features=5)
+rf_clf.fit(train_data, train_label)
+y_pred_rf = rf_clf.predict(test_data)
+plot_results(test_label,y_pred_rf,"Random Forest")
+
+# **eXtreme Gradient Boosting (Xgboost)**
+!pip install xgboost
+import xgboost as xgb
+xgb_clf=xgb.XGBClassifier(max_depth=4,reg_lambda=10,learning_rate=0.001)
+xgb_clf.fit(train_data, train_label)
+y_pred_xgb = xgb_clf.predict(test_data)
+plot_results(test_label,y_pred_xgb,"Xgboost")
+
+# **Lasso**
+from sklearn.linear_model import LogisticRegression
+lasso_model=LogisticRegression(penalty="l1",C=0.14,solver="liblinear")
+lasso_model.fit(train_data,train_label)
+y_pred_lasso = lasso_model.predict(test_data)
+plot_results(test_label,y_pred_lasso,"Lasso")
+# **set epoch and batch size**
+my_epoch=1000
+my_batch_size=200
+
+# **CNN**
+train_data_reshaped=train_data.reshape((train_data.shape[0],train_data.shape[1],1 ))
+test_data_reshaped=test_data.reshape((test_data.shape[0],test_data.shape[1],1 ))
+
+cnn_model = Sequential()
+cnn_model.add(keras.layers.ZeroPadding1D(padding=(1),input_shape=(train_data.shape[1],1)))
+cnn_model.add(keras.layers.Conv1D(2,kernel_size=3,strides=1,padding="valid",activation='relu' ,name="conv1"))
+cnn_model.add(tf.keras.layers.BatchNormalization())
+cnn_model.add(MaxPooling1D(pool_size=2,strides=2,name="pool1"))
+cnn_model.add(keras.layers.Conv1D(4,kernel_size=5,strides=1,padding="same",activation='relu',name="conv2"))#"same" means zero padding
+cnn_model.add(tf.keras.layers.BatchNormalization())
+cnn_model.add(MaxPooling1D(pool_size=2,strides=2,name="pool2"))
+cnn_model.add(Flatten())
+cnn_model.add(Dense(10, activation='relu',name="fc1"))
+cnn_model.add(Dense(50, activation='relu',name="fc2"))
+cnn_model.add(Dense(1,activation="sigmoid"))
+cnn_model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=0.001),loss= keras.losses.binary_crossentropy,metrics="acc" )
+
+cnn_model.summary()
+keras.utils.vis_utils.plot_model(cnn_model)
+
+cnn_model_hist=cnn_model.fit(train_data_reshaped ,train_label, verbose=2, batch_size=my_batch_size, epochs=600)
+
+# **test CNN**
+y_pred_cnn=cnn_model.predict(test_data_reshaped,verbose=2)
+y_pred_cnn[y_pred_cnn > 0.5]=1
+y_pred_cnn[y_pred_cnn < 0.5]=0
+plot_results(test_label,y_pred_cnn,"CNN")
+# **BPNN**
+
+from keras.models import Sequential
+from keras.layers import Dense
+import numpy
+model = Sequential()
+model.add(Dense(37, input_dim=train_data.shape[1], activation='relu'))
+model.add(Dense(37, activation='relu'))
+model.add(Dense(1, activation='sigmoid'))
+model.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.SGD(learning_rate=0.01), metrics=['accuracy'])
+history = model.fit(train_data,train_label, epochs=my_epoch, batch_size=train_data.shape[0])
+
+# **test BPNN**
+probabilities = model.predict(test_data)
+y_pred_bpn = [float(np.round(x)) for x in probabilities]
+plot_results(test_label,y_pred_bpn,"BPNN")
+# **AUC and ROC curve**
+fpr_cnn, tpr_cnn, _ = roc_curve(test_label, y_pred_cnn)
+fpr_rf, tpr_rf, _ = roc_curve(test_label, y_pred_rf)
+fpr_xgb, tpr_xgb, _ = roc_curve(test_label, y_pred_xgb)
+fpr_svm, tpr_svm, _ = roc_curve(test_label, y_pred_svm)
+fpr_bpnn, tpr_bpnn, _ = roc_curve(test_label, y_pred_bpn)
+fpr_lasso, tpr_lasso, _ = roc_curve(test_label,y_pred_lasso )
+
+auc_cnn = auc(fpr_cnn,tpr_cnn)
+auc_rf= auc(fpr_rf,tpr_rf)
+auc_xgb = auc(fpr_xgb,tpr_xgb)
+auc_svm = auc(fpr_svm,tpr_svm)
+auc_bpnn = auc(fpr_bpnn,tpr_bpnn)
+auc_lasso = auc(fpr_lasso,tpr_lasso)
+
+plt.figure(figsize=(10,12),dpi=200)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.plot(fpr_cnn, tpr_cnn, label='CNN (area = {:.3f})'.format(auc_cnn))
+plt.plot(fpr_rf, tpr_rf, label='Random Forest (area = {:.3f})'.format(auc_rf))
+plt.plot(fpr_xgb, tpr_xgb, label='XGB (area = {:.3f})'.format(auc_xgb))
+plt.plot(fpr_svm, tpr_svm, label='SVM (area = {:.3f})'.format(auc_svm))
+plt.plot(fpr_bpnn, tpr_bpnn, label='BPNN (area = {:.3f})'.format(auc_bpnn))
+plt.plot(fpr_lasso, tpr_lasso, label='Lasso (area = {:.3f})'.format(auc_lasso))
+
+plt.xlabel('False positive rate')
+plt.ylabel('True positive rate')
+plt.title('ROC curve')
+plt.legend(loc='best')
+plt.show()
+# **feature selection by LASSO**
+from sklearn.linear_model import LogisticRegression
+lasso_model=LogisticRegression(penalty="l1",C=0.14,solver="liblinear")
+lasso_model.fit(train_data,train_label)
+
+coef=lasso_model.coef_[0]
+imp_features_idx=np.where(coef!=0)[0]
+print("features coefficient \n",coef)
+print("****************************")
+print("important features index\n")
+print(imp_features_idx)
+print("****************************")
+print("important features name:\n")
+imp_features_names=data_main.columns[imp_features_idx]
+imp_features_names
+coef_non_zero=coef[coef!=0]
+# **plot features weight**
+colors = np.array([(1,0,0)]*len(coef_non_zero))
+colors[coef_non_zero >= 0] = (0,0,1)
+plt.figure(figsize=(10,12),dpi=200)
+plt.barh(imp_features_names, coef_non_zero,color = colors)
+plt.xlabel('Weight')
+plt.ylabel('Coef')
+plt.title('Coefficient Weights')
+plt.legend(loc='best')
+plt.show()
+# **important Features AUC**
+auc_bpnn_list=[]
+fpr_bpnn_list=[]
+tpr_bpnn_list=[]
+
+for idx in imp_features_idx:
+  model = Sequential()
+  model.add(Dense(37, input_dim=(1), activation='relu'))
+  model.add(Dense(37, activation='relu'))
+  model.add(Dense(1, activation='sigmoid'))
+  # 2. compile the network
+  model.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.SGD(learning_rate=0.1), metrics=['accuracy'])
+  # 3. fit the network
+  history = model.fit(train_data[:,idx],train_label, epochs=my_epoch, batch_size=my_batch_size,verbose=0)
+
+  probabilities = model.predict(test_data[:,idx])
+  y_pred_bpnn = [float(np.round(x)) for x in probabilities]
+  # plot_results(test_label,y_pred_bpnn,data_main.columns[idx])
+
+
+  fpr_bpnn, tpr_bpnn, _ = roc_curve(test_label, y_pred_bpnn)
+  fpr_bpnn_list.append(fpr_bpnn)
+  tpr_bpnn_list.append(tpr_bpnn)
+  auc_bpnn = auc(fpr_bpnn,tpr_bpnn)
+  auc_bpnn_list.append(auc_bpnn)
+
+
+plt.figure(figsize=(10,12),dpi=200)
+for i in range(len(imp_features_idx)):
+  plt.plot([0, 1], [0, 1], 'k--')
+  plt.plot(fpr_bpnn_list[i], tpr_bpnn_list[i], label= imp_features_names[i]+' (area = {:.3f})'.format(auc_bpnn_list[i]))
+plt.xlabel('False positive rate')
+plt.ylabel('True positive rate')
+plt.title('ROC curve')
+plt.legend(loc='best')
+plt.show()
