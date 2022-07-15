@@ -1,0 +1,518 @@
+#################### edgeR ########################
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+
+setwd("C:/Users/psequ/OneDrive/Desktop/Thesis Systems/TCGA")
+getwd()
+dir()
+
+
+library("TCGAbiolinks")
+library("limma")
+library("edgeR")
+library("glmnet")
+library("factoextra")
+library("FactoMineR")
+library("caret")
+library("SummarizedExperiment")
+library("gplots")
+library("ggplot2")
+library("RTCGA.clinical")
+library("survival")
+library("survminer")
+library("RColorBrewer")
+library("gProfileR")
+library("genefilter")
+library("EDASeq")
+library("DESeq2")
+library("org.Hs.eg.db")
+library("sva")
+#
+GDCprojects = getGDCprojects()
+head(GDCprojects[c("project_id", "name")])
+##the summary shows that TCGA provide data for 500 patients including clinical, expression, DNA methylation, and genotyping data
+TCGAbiolinks:::getProjectSummary("TCGA-READ")
+
+##Now, we focus on a particular type of data summarization for mRNA-seq data (workflow.type), which is based on raw counts estimated with HTSeq.
+query_TCGA = GDCquery(
+  project =c("TCGA-COAD","TCGA-READ"),
+  data.category = "Transcriptome Profiling", # parameter enforced by GDCquery
+  experimental.strategy = "RNA-Seq",
+  workflow.type = "HTSeq - Counts")
+
+
+##Visualize the query results
+prad_res = getResults(query_TCGA) # make results as table
+# head(prad_res) # data of the first 6 patients.
+colnames(prad_res) # columns present in the table
+
+head(prad_res$sample_type) # first 6 types of tissue.
+class(prad_res$sample_type)
+prad_res$sample_type <- as.factor(prad_res$sample_type)
+summary(prad_res$sample_type) # summary of distinct tissues types present in this study
+
+##for simplicity, we ignore the small class of metastasis, therefore, we redo the query
+
+DataDirectory <- paste0("../GDC/",gsub("-","_",CancerProject))
+FileNameData <- paste0(DataDirectory, "_","HTSeq_Counts",".rda")
+
+
+query_TCGA = GDCquery(
+  project = c("TCGA-COAD","TCGA-READ"),
+  data.category = "Transcriptome Profiling", # parameter enforced by GDCquery
+  experimental.strategy = "RNA-Seq",
+  data.type = "Gene Expression Quantification",
+  workflow.type = "HTSeq - Counts",
+  sample.type = c("Primary Tumor", "Solid Tissue Normal"))
+
+GDCdownload(query = query_TCGA)
+tcga_data = GDCprepare(query_TCGA)
+
+geneExp <- SummarizedExperiment::assay(tcga_data)
+
+dim(tcga_data)
+colnames(colData(tcga_data))
+
+#
+
+clinical_data = colData(tcga_data)
+clinical= as.data.frame(clinical_data)
+
+clinical=clinical[,c(-63:-111)]
+clinical=clinical[,c(-23:-61)]
+clinical=clinical[,c(-6:-21)]
+
+write.table(clinical, file = "clinical_COAD.txt", row.names=F, sep="\t", quote=F)
+
+group = factor(clinical_data$definition)
+group = relevel(group, ref="Solid Tissue Normal")
+
+design = model.matrix(~group)
+head(design)
+
+dge = DGEList( # creating a DGEList object
+  counts=assay(tcga_data),
+  samples=colData(tcga_data),
+  genes=as.data.frame(rowData(tcga_data)))
+
+rownames(dge)
+
+#Annotation
+
+gene.ids <-  select(org.Hs.eg.db, rownames(dge), keytype="ENSEMBL",columns = c("SYMBOL","REFSEQ"))
+
+sum(duplicated(gene.ids$ENSEMBL))
+gene.ids <- gene.ids[!duplicated(gene.ids$ENSEMBL),] 
+
+dge$genes <- gene.ids
+row.names(dge$counts)=dge$genes$SYMBOL
+
+# filtering
+keep = filterByExpr(dge,design) # defining which genes to keep
+dge = dge[keep,,keep.lib.sizes=FALSE] # filtering the dge object
+rm(keep)
+
+dge = calcNormFactors(dge,method="TMM")
+
+norm_counts <- cpm(dge,log =TRUE )
+
+v = voom(dge,design,plot=TRUE)
+row.names(v$E)=v$genes$SYMBOL
+
+norm<-v$E #can be used for WGCNA
+
+
+norm<- norm[grep("NM", rownames(norm)), ]
+
+# For expression analysis of final 37 genes
+
+input=norm[c("CEACAM7","DPEP1","CLCA1","CLCA4","GUCA2B","CDH3","MS4A12","SLC4A4","SLC26A3","CHGA","AQP8","CEMIP","CA2","KRT23","GCG","INHBA","PYY","CA1","MMP7","MMP3","CLDN8","SST","CLDN1","CXCL3","CXCL1","FOXQ1","CLDN2","CHP2","CA4","CA7","CST1","ZG16","ETV4","MMP1","GUCA2A","CD177","MT1M","SNHG15","TPTEP1","CDKN2B-AS1","LINC00974","SNHG1","UCA1","LINC00525","CCDC13-AS1","SNHG12","PCAT18","LINC00507","LINC00449","CLDN10-AS1"
+
+),]
+
+## preparing list for modules
+modules = read.csv( "modules.csv")
+
+Blue<-modules$Blue
+
+Blue_1=norm[Blue,]
+
+dim(Blue_1)
+
+#### Prepare two separate lists for lncRNA and mRNA for P correlation
+
+rownames(final0.05)<-final0.05$SYMBOL
+
+ref_Blue<-final0.05[Blue,]
+
+Blue_lnc<-ref_Blue[grep("NR", ref_Blue$REFSEQ), ]
+
+Blue_lnc<-Blue_lnc$SYMBOL
+
+Blue_lnc=norm[Blue_lnc,]
+
+Blue_mRNA<-ref_Blue[grep("NM", ref_Blue$REFSEQ), ]
+
+Blue_mRNA<-Blue_mRNA$SYMBOL
+
+Blue_mRNA=norm[Blue_mRNA,]
+
+dim(Blue_mRNA)
+
+write.table(salmon_1, file = "salmon_1.txt", row.names=T, sep="\t", quote=F)
+
+write.table(norm, file = "norm_WGCNA.txt", row.names=T, sep="\t", quote=F)
+
+########Correlation between lncRNAs and mRNA########
+
+mat1 <- t(Blue_mRNA)
+mat2 <- t(Blue_lnc)
+# then do the magic
+result <- apply(mat1, 2, function(col_mat1){
+  apply(mat2, 2, function(col2, col1) {
+    cor.test(col2, col1)$estimate #$p.value or $estimate #this returns the p-value of the cor.test
+  }, col1=col_mat1)
+})
+# mRNA1 - incRNA2 correlation is same as incRNA2 - mRNA1 correlation so remove them
+result[lower.tri(result)] <- NA
+# melt matrix to get in long format
+library(reshape)
+result <- melt(result)
+# and remove the NA-values (the double ones)
+result <- na.omit(result)
+
+write.table(result, file = "Blue_new_cor.txt", row.names=T, sep="\t", quote=F)
+
+
+###########
+fit = lmFit(v, design)
+fit = eBayes(fit)
+
+
+limma_pipeline = function(
+  tcga_data,
+  condition_variable,
+  reference_group=NULL){
+  
+  design_factor = colData(tcga_data)[, condition_variable, drop=T]
+  
+  group = factor(design_factor)
+  if(!is.null(reference_group)){group = relevel(group, ref=reference_group)}
+  
+  design = model.matrix(~ group)
+  
+  dge = DGEList(counts=assay(tcga_data),
+                samples=colData(tcga_data),
+                genes=as.data.frame(rowData(tcga_data)))
+  
+  # filtering
+  keep = filterByExpr(dge,design)
+  dge = dge[keep,,keep.lib.sizes=FALSE]
+  rm(keep)
+  
+  # Normalization (TMM followed by voom)
+  dge = calcNormFactors(dge)
+  v = voom(dge, design, plot=TRUE)
+  
+  # Fit model to data given design
+  fit = lmFit(v, design)
+  fit = eBayes(fit)
+  
+  # Show top genes
+  topGenes = topTable(fit, coef=ncol(design), number=Inf, sort.by="p")
+  
+  return(
+    list(
+      voomObj=v, # normalized data
+      fit=fit, # fitted model and statistics
+      topGenes=topGenes # the 100 most differentially expressed genes
+    )
+  )
+}
+
+limma_res = limma_pipeline(
+  tcga_data=tcga_data,
+  condition_variable="definition",
+  reference_group="Solid Tissue Normal"
+)
+
+
+tT <- topTable(fit, adjust="fdr", sort.by="B", number=Inf)
+
+final0.05=subset(tT, abs(logFC)>=1 & adj.P.Val<0.05)
+
+
+final0.05=na.omit(final0.05)
+
+final0.05 <- final0.05[!duplicated(final0.05$SYMBOL), ]
+
+rownames(final0.05)=final0.05$REFSEQ
+
+final0.05=final0.05[,-3]
+final0.05=final0.05[,c(-3,-4)]
+
+final0.05<- final0.05[grep("NR", rownames(final0.05)), ]
+
+UpGenes <- final0.05[ final0.05$logFC > 0, ]
+DownGenes <- final0.05[ final0.05$logFC < 0,]
+
+write.table(final0.05, file = "LncRNA_DEGs.txt", row.names=F, sep="\t", quote=F)
+
+
+#----------Visualization------------------------------------
+plot_PCA = function(voomObj, condition_variable){
+  group = factor(voomObj$targets[, condition_variable])
+  pca = prcomp(t(voomObj$E))
+  # Take PC1 and PC2 for the plot
+  plot(pca$x[,1:2],col=group, pch=19)
+  # include a legend for points
+  legend("bottomleft", inset=.01, levels(group), pch=19, col=1:length(levels(group)))
+  return(pca)
+}
+
+res_pca = plot_PCA(limma_res$voomObj, "definition")
+
+
+
+#################### DESeq2 ########################
+
+install.packages("htmltools")
+
+
+library(htmltools)
+library("DESeq2")
+library(ggplot2)
+library("org.Hs.eg.db")
+library("rhdf5")
+library("tools")
+library("dendextend")
+library("preprocessCore")
+library("sva")
+library("vioplot")
+
+setwd("C:/Users/psequ/OneDrive/Desktop/Thesis Systems/TCGA")
+getwd()
+dir()
+
+#countData (Put Angle bracket and "-" here) 
+
+data<- read.csv('genes.csv', header = TRUE, sep = ",")
+
+head(data)
+
+metadata<-read.csv('metadata.csv', header = TRUE, sep = ",")
+metadata
+
+group = factor(metadata$definition)
+group = relevel(group, ref="Solid Tissue Normal")
+
+design = model.matrix(~group)
+head(design)
+
+
+#Construct DESEQDataSet Object
+
+dds<- DESeqDataSetFromMatrix(countData=data,colData=metadata, 
+                             design=~definition, tidy = TRUE)
+
+dds
+
+# Pre-filtering
+
+keep <- rowSums(counts(dds)) >= 20
+dds <- dds[keep,]
+
+
+dds<-DESeq(dds)
+
+
+# Factor levels
+
+dds$definition <- factor(dds$definition, levels = c("Solid.Tissue.Normal","Primary.solid.Tumor"))
+
+dds$definition <- relevel(dds$definition, ref = "Solid.Tissue.Normal")
+
+
+
+#Annotation
+
+gene.ids <-  select(org.Hs.eg.db, rownames(dds), keytype="ENSEMBL",columns = "SYMBOL")
+
+sum(duplicated(gene.ids$ENSEMBL))
+gene.ids <- gene.ids[!duplicated(gene.ids$ENSEMBL),] 
+
+
+dds$Stages <- gene.ids
+row.names(dds)=gene.ids$SYMBOL
+
+
+res<-results(dds)
+
+head(results(dds, tidy=TRUE))
+summary(res)
+
+res<- res[order(res$padj),]
+head(res)
+
+dim(vsd1)
+dim(correctedExpression)
+
+# Normalize and transform the data 
+dds_norm <- vst(dds)
+
+vsd = getVarianceStabilizedData(dds)
+
+######## Batch effect correction #########
+boxplot(log2(1+vsd[,sample(1:ncol(vsd), 100)]), main="read count distribution by sample")
+
+cc = cor(vsd1)
+
+dend <- as.dendrogram(hclust(as.dist(1-cc)))
+
+series<-colnames(vsd1)
+
+useries = unique(series)
+series_match = useries[match(series, useries)]
+
+colos <- colorspace::rainbow_hcl(length(useries), c = 160, l  = 50)
+names(colos) = useries
+series_color <- colos[series_match]
+
+clu = cutree(dend, h=0.25)
+labels_colors(dend) <- series_color[order.dendrogram(dend)]
+dend <- color_branches(dend, h = 0.1)
+
+par(mar = c(4,1,1,12))
+plot(dend, horiz = TRUE)
+colored_bars(cbind(clu, series_color), dend, rowLabels = c("Cluster", "Series"), horiz = TRUE)
+legend("topleft", legend = useries, fill = colos, bg="white", cex=0.6)
+
+largest_cluster = names(rev(sort(table(clu))))[1]
+ww = which(clu == largest_cluster)
+plot(density(cor(vsd1[,ww])), lwd=3, main="correlation of leftover samples")
+
+reduced_expression = vsd1[,ww]
+reduced_series = series[ww]
+
+batchid = match(reduced_series, unique(reduced_series))
+correctedExpression <- ComBat(dat=reduced_expression, batch=batchid, par.prior=TRUE, prior.plots=FALSE)
+
+
+cc = cor(correctedExpression)
+dend <- as.dendrogram(hclust(as.dist(1-cc)))
+useries = unique(reduced_series)
+series_match = useries[match(reduced_series, useries)]
+colos <- colorspace::rainbow_hcl(length(useries), c = 160, l  = 50)
+names(colos) = useries
+series_color <- colos[series_match]
+clu = cutree(dend, h=0.25)
+labels_colors(dend) <- series_color[order.dendrogram(dend)]
+dend <- color_branches(dend, h = 0.25)
+
+par(mar = c(4,1,1,12))
+plot(dend, horiz = TRUE)
+colored_bars(cbind(clu, series_color), dend, rowLabels = c("Cluster", "Series"), horiz = TRUE)
+legend("topleft", legend = useries, fill = colos, bg="white", cex=0.6)
+
+plot(density(cor(vsd1[,ww])), lwd=3, main="correlation of leftover samples", ylim=c(0,30))
+lines(density(cor(correctedExpression)), lwd=3, main="correlation of leftover samples", col="red")
+legend("topleft", legend=c("uncorrected","corrected"), lty=1, lwd=3, col=c("black","red"))
+
+#Extract mylistnames for WGCNA from RRA list
+
+vsd1 <- vsd[!duplicated(row.names(vsd)),] 
+
+RRA = read.csv("Up-Down1.csv")
+
+clinical = read.csv("clinical_COADREAD.csv")
+
+sym<-final0.05$SYMBOL
+
+corrected<-correctedExpression[sym,]
+
+dim(corrected)
+
+##
+
+vsd2<-t(vsd1)
+dim(vsd2)
+
+
+Input1 <- row.names(vsd2)
+
+row.names(vsd2)
+
+row.names(clinical)=clinical$barcode
+
+col<- row.names(clinical)
+
+# find the intersect between your list and the list of names from Bigfile
+common1 <- intersect(col,Input1)
+
+# extract info from dataframe 
+list <- vsd2[match(col,common1),]
+
+head(list)[1:6]
+dim(list)
+
+col1<-row.names(list)
+
+write.table(col1,"col1.txt", row.names=T, sep="\t", quote=F)
+
+
+# collect the names from the bigfile
+
+vsd3<- t(vsd2)
+dim(vsd2)
+
+Input <- row.names(vsd3)
+
+mylist<-RRA$Name
+
+# find the intersect between your list and the list of names from Bigfile
+common <- intersect(Input, mylist)
+
+# extract info from dataframe 
+list <- vsd3[match(common, mylist),]
+
+dim(Data)
+
+write.table(list,"WGCNA_list.txt", row.names=T, sep="\t", quote=F)
+
+normallist = read.csv("list.csv")
+
+Data <- subset( list, select = -c(TCGA.AA.3518.11A.01R.1672.07,TCGA.A6.5662.11A.01R.1653.07,TCGA.AZ.6603.11A.02R.1839.07,TCGA.AA.3496.11A.01R.1839.07,TCGA.AZ.6605.11A.01R.1839.07,TCGA.AA.3516.11A.01R.A32Z.07,TCGA.A6.5667.11A.01R.1723.07,TCGA.A6.2684.11A.01R.A32Z.07,TCGA.A6.2685.11A.01R.A32Z.07,TCGA.AA.3489.11A.01R.1839.07,TCGA.AA.3525.11A.01R.A32Z.07,TCGA.AA.3522.11A.01R.A32Z.07,TCGA.AA.3660.11A.01R.1723.07,TCGA.A6.2686.11A.01R.A32Z.07,TCGA.AA.3712.11A.01R.1723.07,TCGA.A6.2683.11A.01R.A32Z.07,TCGA.AA.3534.11A.01R.A32Z.07,TCGA.AA.3713.11A.01R.1723.07,TCGA.AZ.6600.11A.01R.1774.07,TCGA.AA.3697.11A.01R.1723.07,TCGA.F4.6704.11A.01R.1839.07,TCGA.A6.2671.11A.01R.A32Z.07,TCGA.AA.3663.11A.01R.1723.07,TCGA.AZ.6598.11A.01R.1774.07,TCGA.AA.3655.11A.01R.1723.07,TCGA.A6.2682.11A.01R.A32Z.07,TCGA.A6.2680.11A.01R.A32Z.07,TCGA.A6.2679.11A.01R.A32Z.07,TCGA.A6.5659.11A.01R.1653.07,TCGA.AA.3527.11A.01R.A32Z.07,TCGA.AA.3517.11A.01R.A32Z.07,TCGA.AA.3520.11A.01R.A32Z.07,TCGA.AA.3531.11A.01R.A32Z.07,TCGA.A6.2678.11A.01R.A32Z.07,TCGA.AA.3514.11A.01R.A32Z.07,TCGA.AA.3511.11A.01R.1839.07,TCGA.AZ.6601.11A.01R.1774.07,TCGA.A6.2675.11A.01R.1723.07,TCGA.AA.3662.11A.01R.1723.07,TCGA.AZ.6599.11A.01R.1774.07,TCGA.A6.5665.11A.01R.1653.07,TCGA.AH.6643.11A.01R.1830.07,TCGA.AF.5654.11A.11R.1660.07,TCGA.AG.3732.11A.01R.1660.07,TCGA.AG.3725.11A.01R.1736.07,TCGA.AF.2691.11A.01R.A32Z.07,TCGA.AF.2689.11A.01R.A32Z.07,TCGA.AF.3400.11A.01R.A32Z.07,TCGA.AG.3742.11A.01R.1660.07,TCGA.AG.3731.11A.01R.1736.07,TCGA.AF.2692.11A.01R.A32Z.07
+) )
+
+write.table(Data,"WGCNA_list.txt", row.names=T, sep="\t", quote=F)
+##
+
+norm<-assay(dds_norm)
+
+dim(list)
+
+library(genefilter)
+
+# Top 10%
+
+genes<-varFilter(vsd, var.func=IQR, var.cutoff=0.85, filterByQuantile=TRUE)
+dim(genes)
+
+# Top 50%
+genes<-varFilter(norm)
+
+write.table(genes, file = "genes.txt", row.names=T, sep="\t", quote=F)
+
+
+dim(genes)
+head(genes)
+
+plotPCA(dds_norm, intgroup="definition")
+
+
+normalized_counts <- assay(dds_norm) %>%
+  t() 
+
+
