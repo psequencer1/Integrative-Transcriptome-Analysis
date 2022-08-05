@@ -380,20 +380,6 @@ COADclin1 = read.csv("TNM.csv");
 head(COADclin)
 dim(exp)
 
-
-
-use.clin1 <- COADclin1 %>%
-  subset(barcode %in% row.names(MEs)) %>%
-  dplyr::select(c("barcode", "TNM_staging","T_stage","N_stage","M_stage"))
-
-use.clin <- COADclin %>%
-  subset(barcode %in% colnames(list)) %>%
-  dplyr::select(c("barcode", "ajcc_pathologic_tumor_stage")) %>%
-  `names<-`(c("sample","TNM_Staging")) %>%
-  mutate_at(vars("TNM_Staging"), ~ifelse(. %in% c("Stage I", "Stage II","Stage III","Stage IV" ), ., "Unknown"))
-
-head(use.clin)
-
 ########## datTraits is working for TNM and design model matrix for stages ##########
 
 Samples = rownames(data.mat);
